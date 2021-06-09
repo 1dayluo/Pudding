@@ -10,12 +10,12 @@ from argparse import ArgumentParser
 from pprint import pprint
 from collections import Counter
 import mimetypes
-import gzip,tarfile,zipfile,py7zr
+import gzip,tarfile,zipfile,py7zr,patoolib
 import undetected_chromedriver.v2 as uc
 from email import message_from_file
 from email.header import decode_header,Header
 from email.utils import parseaddr,parsedate
-
+from bs4 import BeautifulSoup
 
 MAIL_OUTPUT_DIR = 'Attachment'
 def current_file(path='input',file_lists=[]):
@@ -73,6 +73,7 @@ def get_FileSize(filePath):
 def save_attach(attach_name,data,mail_info):
     attachment_info = {}
     check_type = attach_name.split('.')[-1]
+    print('attach name is',attach_name)
     save_path = MAIL_OUTPUT_DIR + '/' + '[{}]'.format(mail_info['file_name']) + attach_name
 
     if not os.path.exists(MAIL_OUTPUT_DIR):
@@ -87,7 +88,7 @@ def save_attach(attach_name,data,mail_info):
     attachment_info['addition'] = []
     add_dict = {}
 
-    if check_type in ['zip','tar','gz','7z']: #压缩包类型
+    if check_type in ['zip','tar','gz','7z','rar']: #压缩包类型
 
         # archive_dir = _dir(MAIL_OUTPUT_DIR + '/' + 'Archive')
 
@@ -109,7 +110,18 @@ def save_attach(attach_name,data,mail_info):
 
 
         if check_type == 'rar':
-            pass
+            print('\t????extarct:',extarct_dir)
+            if not os.path.exists(extarct_dir):
+                patoolib.extract_archive(save_path, outdir=extarct_dir)
+            print(os.listdir(extarct_dir))
+
+            for names in os.listdir(extarct_dir):
+                names_path = extarct_dir + '/' + names
+                add_dict['filename'] = names
+                add_dict['md5'] = calc_md5([names_path]).get(names_path)
+                add_dict['size'] = '{}MB'.format(get_FileSize(names_path))
+                attachment_info['addition'].append(add_dict)
+            pprint(add_dict)
         if check_type == 'tar':
             tar_file = tarfile.open(save_path)
 
@@ -171,36 +183,42 @@ def read_mail(eml_path='mail/extarct_file.eml'):
     if os.path.exists(eml_path):
         with open(eml_path) as f:
             msg = message_from_file(f)
-            print(msg.keys())
-            mail_info['subject'] =  msg["Subject"]
-            mail_info['receiver'] = parseaddr(msg.get('To'))[1]
-            mail_info['sender'] = parseaddr(msg.get('From'))[1]
-            mail_info['cc'] = parseaddr(msg.get('Cc'))[1]
-            mail_info['date'] =  msg_date(msg['Date'])
-            mail_info['eml_size'] = "{}MB".format(get_FileSize(eml_path))
-            mail_info['file_name'] = eml_path.split('/')[-1]
-            attach_name_list = []
-            for part in msg.walk():
-                if part.get_content_maintype() == 'multipart':continue
-                filename = part.get_filename() #获取附件
-                # print(msg.keys())
+        d,e = decode_header(msg["Subject"])[0]
+        mail_info['subject'] =  [msg["Subject"] if e is None else d.decode(e)][0]
+        mail_info['receiver'] = parseaddr(msg.get('To'))[1]
+        mail_info['sender'] = parseaddr(msg.get('From'))[1]
+        mail_info['cc'] = parseaddr(msg.get('Cc'))[1]
+        mail_info['date'] =  msg_date(msg['Date'])
+        mail_info['eml_size'] = "{}MB".format(get_FileSize(eml_path))
+        mail_info['file_name'] = eml_path.split('/')[-1]
+        attach_name_list = []
 
-                if filename:
-                    savename = filename
+        for part in msg.walk():
+            if part.get_content_maintype() == 'multipart':continue
 
-                    if filename in attach_name_list:
-                        # print(Counter(attach_name_list)[filename])
+            filename = part.get_filename() #获取附件
+            # print(msg.keys())
 
-                        savename = ''.join(filename.split('.')[:-1]) + '(' + str(Counter(attach_name_list)[filename]) + ').' + ''.join(filename.split('.')[-1:])
+            if filename:
+                f,e = decode_header(filename)[0]
+
+                savename = [ filename if e is None else f.decode(e) ][0]
+
+                if filename in attach_name_list:
+                    # print(Counter(attach_name_list)[filename])
+
+                    savename = ''.join(filename.split('.')[:-1]) + '(' + str(Counter(attach_name_list)[filename]) + ').' + ''.join(filename.split('.')[-1:])
 
 
-                    data = part.get_payload(decode=True)
-                    attachment_info  = save_attach(savename, data, mail_info)
+                data = part.get_payload(decode=True)
+                attachment_info  = save_attach(savename, data, mail_info)
 
-                    attach_name_list.append(filename)
-                    mail_info['attach'].append(attachment_info)
-
-            pprint(mail_info)
+                attach_name_list.append(filename)
+                mail_info['attach'].append(attachment_info)
+            else:
+                content = part.get_payload(decode=True)
+                mail_info['content'] = BeautifulSoup(content,'html.parser').get_text()
+        pprint(mail_info)
 
         return mail_info
 
@@ -209,7 +227,7 @@ if __name__ == '__main__':
     parser.add_argument('-mail',nargs=1,help=u'input path of dir,and read all format of eml files')
     parser.add_argument('-md5',nargs=1,help=u'choice target dir')
     parser.add_argument('-md5default',action="store_true",help=u'default，read input file')
-    args = parser.parse_args()
+    args = parser.parse_args(['-mail','mail'])
 
 
     if args.md5:
