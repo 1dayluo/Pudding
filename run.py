@@ -227,7 +227,7 @@ if __name__ == '__main__':
     parser.add_argument('-mail',nargs=1,help=u'input path of dir,and read all format of eml files')
     parser.add_argument('-md5',nargs=1,help=u'choice target dir')
     parser.add_argument('-md5default',action="store_true",help=u'default，read input file')
-    args = parser.parse_args(['-mail','mail'])
+    args = parser.parse_args()
 
 
     if args.md5:
