@@ -1,0 +1,4 @@
+patool==1.12
+undetected_chromedriver==3.0.0
+py7zr==0.16.1
+beautifulsoup4==4.9.3
