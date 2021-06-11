@@ -217,7 +217,12 @@ def read_mail(eml_path='mail/extarct_file.eml'):
                 mail_info['attach'].append(attachment_info)
             else:
                 content = part.get_payload(decode=True)
-                mail_info['content'] = BeautifulSoup(content,'html.parser').get_text()
+                soup = BeautifulSoup(content, 'html.parser')
+                content_text = soup.get_text().strip(r'\n')
+                content_url = [a['href'] if a is not None else '' for a in soup.find_all('a')]
+                # content_urls = soup.find_all('a')
+                mail_info['content'] = content_text
+                mail_info['content_urls'] = content_url
         pprint(mail_info)
 
         return mail_info
